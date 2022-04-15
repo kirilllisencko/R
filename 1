@@ -1,0 +1,57 @@
+#Лысенко Кирилл Александрович — для региона 64 рассчитайте урожайность пшеницы в период с 2002 по 2012 год взяв для рассчета средние суммы активных температур за эти годы, с 18 ближайших метеостанций
+library(lubridate)
+library(stringr)
+library(ggplot2)
+library(tidyverse)
+library(rnoaa)
+#station_data = ghcnd_stations() #Может занять несколько минут лучше выполнить один раз в месте с хорошим интернетом и сохранить результат
+setwd("~/Desktop")
+station_data = read.csv("station_data.csv")
+#После получения всписка всех станций, получите список станций ближайших к столице вашего региона,создав таблицу с именем региона и координатами его столицы
+saratov = data.frame(id = "SARATOV", latitude = 51.533562, longitude = 46.034266)
+saratov_around = meteo_nearby_stations(lat_lon_df = saratov, station_data = station_data,
+ limit = 18, var = c("PRCP", "TAVG"),
+ year_min = 2002, year_max = 2012)
+#saratov_around это список единственным элементом которого является таблица, содержащая идентификаторы метеостанций отсортированных по их 
+# удалленности от Саратова, очевидно что первым элементом таблицы будет идентификатор метеостанции Саратова, его то мы и попытаемся получить
+saratov_id = saratov_around[["SARATOV"]][["id"]][1]
+str(saratov_around)
+#Для получения всех данных с метеостанции, зная ее идентификатор, используйте след. команду
+all_saratov_data = meteo_tidy_ghcnd(stationid = saratov_id)
+saratov_table=saratov_around[[1]]
+summary(saratov_table)
+all_i=data.frame()
+all_saratov=data.frame()
+for(i in 1:18)
+{all_i = meteo_tidy_ghcnd(stationid=saratov_around[["SARATOV"]][["id"]][i])
+all_i=all_i[ ,c("id","date", "tavg")]
+print(all_i)
+all_saratov=rbind(all_saratov, all_i)}
+#Средняя сумма активных температур
+data_saratov=all_saratov %>% 
+ mutate(date=ymd(date),
+ year=year(date),
+ month=month(date)) %>% 
+ mutate(tavg=case_when(tavg<50 ~ 0, TRUE ~ tavg)/10) %>% 
+ filter (year>2002 & year<2012) %>% 
+ group_by(id,year,month) %>% 
+ summarize(tsum=sum(tavg, na.rm=T)) %>% 
+ group_by(month) %>% summarize(St = mean(tsum, na.rm=T))
+afi=c(0.00,0.00,0.00,32.11,26.31,25.64,32.20,18.73,
+ 16.30,13.83,0.00,0.00)
+bfi=c(0.00,0.00,0.00,11.30,9.26,9.03,8.16,6.59,5.73,
+ 4.87,0.00,0.00)
+di=c(0.00,0.00,0.00,0.33,1.00,1.00,1.00,0.32,0.00,
+ 0.00,0.00,0.00)
+y=1.0
+Kf=300
+Qj=1600
+Lj=2.2
+Ej=25
+#Рассчитаем урожайность по месяцам
+data_saratov= data_saratov %>% 
+ mutate(Fi=(afi)+(bfi)*y*(data_saratov$St))
+data_saratov= data_saratov %>% mutate(Yj=(((data_saratov$Fi)*(di)*Kf)/(Qj*Lj*(100-Ej))))
+#Расчитываем суммарную урожайность как сумму по месяцам
+YIELD=sum(data_saratov$Yj);YIELD
+# Ответ: 21 ц/га
